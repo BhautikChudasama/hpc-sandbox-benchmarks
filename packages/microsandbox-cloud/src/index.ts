@@ -58,6 +58,12 @@ export const MICROSANDBOX_CREATE_TIMEOUT_MS = 20 * 60_000;
 export const MICROSANDBOX_RECOVERY_CONFIRMATION_MS = 2_000;
 export const MICROSANDBOX_RECOVERY_MAX_ATTEMPTS = 4;
 export const MICROSANDBOX_INVENTORY_MAX_PAGES = 100;
+/**
+ * How long teardown waits for a requested stop before removing anyway. A guest whose agent died
+ * never finishes stopping (observed live: records held `draining` for 19 h, past their maxDuration),
+ * while remove() accepts a draining record. Well inside the harness's 15 s exit-cleanup budget.
+ */
+export const MICROSANDBOX_STOP_WAIT_MS = 10_000;
 export const MICROSANDBOX_READINESS = Object.freeze({ startup: "create-returns-ready" as const });
 export const MICROSANDBOX_EXECUTION = Object.freeze({
 	syncCapMs: 60_000,
@@ -116,7 +122,9 @@ async function execShell(
  * Stop and remove one record if it exists. Microsandbox Cloud can persist a status=error record
  * before create rejects, remove() is documented for STOPPED sandboxes only, and transitional or
  * undocumented statuses (a record still booting, `crashed`) do occur — so anything not already
- * stopped is stopped first, or the remove rejects and the microVM leaks until its maxDuration.
+ * stopped is stopped first, or the remove rejects and the microVM leaks. A `draining` record already
+ * has a stop in flight and refuses another (HTTP 409), and that stop can wedge forever, so the wait is
+ * bounded and remove() — which accepts a draining record — follows either way.
  * A record the control plane no longer knows is convergence, never a failure.
  */
 async function removeMicrosandbox(backend: DefaultBackend, name: string): Promise<void> {
@@ -128,8 +136,8 @@ async function removeMicrosandbox(backend: DefaultBackend, name: string): Promis
 			const handle = await MsbSandbox.get(name);
 			if (handle.name !== name) throw new Error("Microsandbox returned an unrelated sandbox");
 			if (handle.status !== "stopped") {
-				await handle.requestStop();
-				await handle.waitUntilStopped();
+				if (handle.status !== "draining") await handle.requestStop();
+				await waitForStop(handle);
 			}
 			await MsbSandbox.remove(name);
 		} catch (error) {
@@ -137,6 +145,24 @@ async function removeMicrosandbox(backend: DefaultBackend, name: string): Promis
 			throw error;
 		}
 	});
+}
+
+/** Settle on a stop, or give up quietly after the bound: the caller's remove() is the real verdict. */
+async function waitForStop(handle: MsbSandboxHandle): Promise<void> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const stopped = handle.waitUntilStopped();
+	// The race still sees an early rejection (a vanished ephemeral record); a late one is moot.
+	stopped.catch(() => {});
+	try {
+		await Promise.race([
+			stopped,
+			new Promise<void>((resolve) => {
+				timer = setTimeout(resolve, MICROSANDBOX_STOP_WAIT_MS);
+			}),
+		]);
+	} finally {
+		clearTimeout(timer);
+	}
 }
 
 /** Drain every page; a repeated or empty continuation cursor fails closed. */

@@ -18,6 +18,7 @@ import microsandboxCloud, {
 	MICROSANDBOX_READINESS,
 	MICROSANDBOX_SANDBOX_ID,
 	MICROSANDBOX_SANDBOX_LIFETIME_MS,
+	MICROSANDBOX_STOP_WAIT_MS,
 	microsandboxCloudSpec,
 } from "./index.ts";
 
@@ -108,7 +109,7 @@ function fakeBuilder(create: () => Promise<unknown>) {
 	return { builder: builder as unknown as ReturnType<typeof MsbSandbox.builder>, calls };
 }
 
-function fakeHandle(name: string, status = "running") {
+function fakeHandle(name: string, status = "running", stops = true) {
 	const events: string[] = [];
 	const handle = {
 		name,
@@ -118,9 +119,9 @@ function fakeHandle(name: string, status = "running") {
 		requestStop: async () => {
 			events.push("requestStop");
 		},
-		waitUntilStopped: async () => {
+		waitUntilStopped: () => {
 			events.push("waitUntilStopped");
-			return { name, status: "stopped" };
+			return stops ? Promise.resolve({ name, status: "stopped" }) : new Promise(() => {});
 		},
 		connect: async () => {
 			events.push("connect");
@@ -475,6 +476,30 @@ describe("Microsandbox Cloud account inventory and recovery", () => {
 		await expect(
 			driver.destroyById?.(sandboxRef("microsandbox-cloud", "not-ours")),
 		).rejects.toMatchObject({ code: "invalid-sandbox-ref" });
+	});
+
+	test("removes a draining record whose stop never settles instead of re-stopping it", async () => {
+		// Observed live: a wedged guest holds `draining` indefinitely and refuses a second stop (409).
+		const draining = fakeHandle(OWNED_A, "draining", false);
+		restore(spyOn(MsbSandbox, "get").mockResolvedValue(draining.handle));
+		const removed: string[] = [];
+		restore(
+			spyOn(MsbSandbox, "remove").mockImplementation(async (name: string) => {
+				removed.push(name);
+			}),
+		);
+		const timers = restore(
+			spyOn(globalThis, "setTimeout").mockImplementation(((resolve: () => void) => {
+				resolve();
+				return 0;
+			}) as unknown as typeof setTimeout),
+		);
+		await microsandboxCloud
+			.driver(context)
+			.destroyById?.(sandboxRef("microsandbox-cloud", OWNED_A));
+		expect(draining.events).toEqual(["waitUntilStopped"]);
+		expect(timers.mock.calls[0]?.[1]).toBe(MICROSANDBOX_STOP_WAIT_MS);
+		expect(removed).toEqual([OWNED_A]);
 	});
 
 	test("observes running, terminal-but-present, and absent records distinctly", async () => {
