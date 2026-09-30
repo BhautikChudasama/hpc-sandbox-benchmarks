@@ -21,6 +21,7 @@ export const PROVIDER_IDS = [
 	"tama",
 	"boat",
 	"freestyle",
+	"brezel",
 ] as const;
 
 export type ProviderId = (typeof PROVIDER_IDS)[number];

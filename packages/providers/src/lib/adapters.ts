@@ -32,6 +32,7 @@ export const MIGRATED_DRIVER_IDS = [
 	"namespace",
 	"boat",
 	"freestyle",
+	"brezel",
 ] as const satisfies readonly ProviderId[];
 
 /** A schema id served by a registered DriverModule. Derived from the list, so the two cannot drift. */

@@ -75,7 +75,8 @@ function candidateLaunch(id: ProviderId, refs: CandidateRefs): CandidateLaunch {
 			};
 		case "boat":
 		case "freestyle":
-			// Stock vendor image — no candidate artifact to point at.
+		case "brezel":
+			// Stock or externally prepared image — no candidate artifact to point at.
 			return { artifact: { kind: "none" }, createOptions: {} };
 		case "novita":
 			// Same mapping as e2b (snapshotId → template name), against Novita's control plane.

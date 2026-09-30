@@ -24,6 +24,7 @@ on:
           - 'tama'
           - 'boat'
           - 'freestyle'
+          - 'brezel'
           # <<< end generated: provider-options
       suite:
         description: Suite to run
