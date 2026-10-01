@@ -32,6 +32,7 @@ const REQUIRED_INPUTS = {
 	boat: ["BOAT_API_KEY"],
 	freestyle: ["FREESTYLE_API_KEY"],
 	brezel: ["BREZEL_API_KEY", "BREZEL_API_URL", "BREZEL_PROJECT_ID", "BREZEL_ENVIRONMENT_REVISION"],
+	createos: ["CREATEOS_API_KEY"],
 } as const satisfies Record<ProviderId, readonly string[]>;
 
 const ARTIFACT_KINDS = {
@@ -51,6 +52,7 @@ const ARTIFACT_KINDS = {
 	boat: "none",
 	freestyle: "baked",
 	brezel: "none",
+	createos: "none",
 } as const satisfies Record<ProviderId, (typeof REGISTRY)[ProviderId]["artifact"]["kind"]>;
 
 const BAKED = {

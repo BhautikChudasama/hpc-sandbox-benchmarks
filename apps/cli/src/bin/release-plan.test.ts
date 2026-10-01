@@ -81,6 +81,7 @@ describe("buildReleasePlan matrix", () => {
 			"boat",
 			"freestyle",
 			"brezel",
+			"createos",
 		]);
 	});
 
