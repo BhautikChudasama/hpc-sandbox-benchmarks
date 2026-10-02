@@ -7,46 +7,45 @@
 # Each domain is resolved ONCE, with the structured record parsed from the same bytes the log shows —
 # a second dig for jc would measure a cache-warmed resolver query, systematically underreporting the
 # very number this probe exists to capture.
+#
+# The default DOMAINS are the catalogued cold-DNS Metrics (packages/schema/src/network-probe-metrics.ts,
+# drift-gated by tooling/repo-checks/src/network-probe-targets.test.ts); domains passed as arguments
+# are resolved and recorded the same way but publish no Metric.
+#USAGE arg "[domain]..." var=#true help="Domains to resolve instead of the catalogued list"
 set -uo pipefail
 REPO_ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
 source "${REPO_ROOT}/lib/bench.sh"
+
+DOMAINS=(github.com registry.npmjs.org docker.io pypi.org rubygems.org)
+# usage hands a variadic arg over shell-quoted; eval is how mise documents splitting it back out.
+if [ -n "${usage_domain:-}" ]; then
+	eval "DOMAINS=(${usage_domain})"
+fi
 
 echo "=== DNS Resolver ==="
 try cat /etc/resolv.conf
 
 echo ""
 echo "=== DNS Resolution ==="
-for domain in github.com registry.npmjs.org docker.io pypi.org rubygems.org; do
+for tool in dig jc; do
+	if ! command -v "$tool" &>/dev/null; then
+		skip_result "${tool} not installed"
+		exit 0
+	fi
+done
+
+for domain in "${DOMAINS[@]}"; do
 	echo ""
 	echo "--- $domain ---"
-	if command -v dig &>/dev/null; then
-		rc=0
-		out="$(dig "$domain" 2>/dev/null)" || rc=$?
-		if [ "$rc" -ne 0 ] || [ -z "$out" ]; then
-			echo "(dig failed — exit ${rc})"
-			# Keep dig's own diagnostic (";; connection timed out" vs NXDOMAIN vs REFUSED) — the resolver
-			# behaviour this probe exists to capture. Discarding it left only "(dig failed)".
-			[ -n "$out" ] && printf '%s\n' "$out"
-			continue
-		fi
-		echo "$out"
-		# Structured output via jc, installed through json_result (lib/bench.sh) so a swallowed parse
-		# failure cannot leave a zero-byte .json behind that reads as a real empty answer.
-		if command -v jc &>/dev/null; then
-			if ! printf '%s\n' "$out" | jc --dig 2>/dev/null | json_result "$(task_result_name "$domain")"; then
-				echo "(jc --dig produced no structured record)"
-			fi
-		fi
-	else
-		start=$(_now_ms)
-		getent_rc=0
-		getent hosts "$domain" >/dev/null 2>&1 || getent_rc=$?
-		end=$(_now_ms)
-		if [ "$getent_rc" -eq 0 ]; then
-			echo "$domain: $((end - start))ms (getent)"
-		else
-			# A failed lookup printed a timing line indistinguishable from a successful one.
-			echo "$domain: (getent failed — exit ${getent_rc}, after $((end - start))ms)"
-		fi
+	rc=0
+	out="$(dig "$domain" 2>/dev/null)" || rc=$?
+	if [ "$rc" -ne 0 ] || [ -z "$out" ]; then
+		echo "(dig failed — exit ${rc})"
+		[ -n "$out" ] && printf '%s\n' "$out"
+		continue
+	fi
+	echo "$out"
+	if ! printf '%s\n' "$out" | jc --dig 2>/dev/null | json_result "$(task_result_name "$domain")"; then
+		echo "(jc --dig produced no structured record)"
 	fi
 done

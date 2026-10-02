@@ -25,6 +25,7 @@ export * from "./harness-metrics.ts";
 export * from "./identifiers.ts";
 // Metric vocabulary: Dimension, Direction and the MetricDef shape every Metric declares.
 export * from "./metrics.ts";
+export * from "./network-probe-metrics.ts";
 // Pure artifact lifecycle projections used by release composition roots.
 export * from "./provider-artifacts.ts";
 // Provider identity, declarative inputs/artifacts, and economics registry.

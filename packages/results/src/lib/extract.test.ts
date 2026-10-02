@@ -246,3 +246,74 @@ describe("extractProviderDir", () => {
 		]);
 	});
 });
+
+describe("network probe artifacts", () => {
+	let dir: string;
+	beforeEach(() => {
+		dir = mkdtempSync(join(tmpdir(), "extract-network-"));
+	});
+	afterEach(() => {
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	const write = (name: string, body: unknown): void => {
+		writeFileSync(join(dir, name), JSON.stringify(body));
+	};
+
+	it("keeps every responding time_total and ignores the median", () => {
+		const expectedMs = [
+			1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+			27, 28, 29, 30,
+		];
+		write("network-latency.json", {
+			endpoints: [
+				{
+					url: "https://github.com/",
+					timing_ms: { total: { median: 999 } },
+					curl_records: expectedMs.map((ms) => ({
+						time_total: ms / 1000,
+						response_code: 200,
+						exitcode: 0,
+					})),
+				},
+			],
+		});
+		expect(extractProviderDir(dir, "e2b").contributions).toEqual([
+			{
+				metricId: "network_https_github_com_total_ms",
+				samples: expectedMs,
+				sourceFile: "network-latency.json",
+			},
+		]);
+	});
+
+	it("keeps one cold dig query time", () => {
+		write("network-dns--github.com.json", [
+			{ query_time: 14, status: "NOERROR", question: { name: "github.com." } },
+		]);
+		expect(extractProviderDir(dir, "e2b").contributions).toEqual([
+			{
+				metricId: "network_dns_cold_github_com_ms",
+				samples: [14],
+				sourceFile: "network-dns--github.com.json",
+			},
+		]);
+	});
+
+	it("converts a pinned download to decimal Mbits/sec", () => {
+		write("network-download--speed.json", {
+			http_code: 200,
+			size_download: 54000000,
+			speed_download: 12500000,
+			exitcode: 0,
+			url: "https://nodejs.org/dist/v22.23.1/node-v22.23.1-linux-x64.tar.gz",
+		});
+		expect(extractProviderDir(dir, "e2b").contributions).toEqual([
+			{
+				metricId: "network_download_node_v22_23_1_linux_x64_mbits_per_sec",
+				samples: [100],
+				sourceFile: "network-download--speed.json",
+			},
+		]);
+	});
+});

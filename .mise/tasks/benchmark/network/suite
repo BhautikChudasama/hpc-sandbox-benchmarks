@@ -23,11 +23,6 @@ ensure_pts || true
 run_task benchmark:network:pts:iperf-localhost
 run_task benchmark:network:pts:iperf-wan
 
-# Tolerant probes (raw JSON provenance, no catalogued metrics): where does this sandbox's traffic
-# actually go, and how fast? Endpoint-specific connection timings and a small GitHub control
-# transfer for diagnosis.
-run_task benchmark:network:latency
-run_task benchmark:network:dns
-run_task benchmark:network:download
+run_task benchmark:network:probes
 
 summary
