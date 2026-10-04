@@ -16,7 +16,8 @@
   "dependencies": {
     "@run-cloud/sdk": "catalog:computesdk",
     "@sandbox-benchmarks/driver": "workspace:*",
-    "arktype": "catalog:"
+    "arktype": "catalog:",
+    "@sandbox-benchmarks/schema": "workspace:*"
   },
   "devDependencies": {
     "@repo/tsconfig": "workspace:*",

@@ -342,6 +342,7 @@
       "dependencies": {
         "@run-cloud/sdk": "catalog:computesdk",
         "@sandbox-benchmarks/driver": "workspace:*",
+        "@sandbox-benchmarks/schema": "workspace:*",
         "arktype": "catalog:",
       },
       "devDependencies": {
