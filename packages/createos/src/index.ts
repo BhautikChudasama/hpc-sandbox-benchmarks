@@ -37,6 +37,16 @@ export const CREATEOS_SANDBOX_ID = type(/^sb-[A-Za-z0-9]+$/);
 export const CREATEOS_READINESS = { startup: "create-returns-ready" } as const;
 export const CREATEOS_EXECUTION = { syncCapMs: 60_000, durable: "shell-detach" } as const;
 
+// devbox:1 exposes python3 through an ASDF shim. Phoronix runs profiles with a
+// sanitized environment, so resolve that shim to the installed interpreter
+// before the benchmark harness starts. This is deliberately provider-local:
+// it changes only the disposable CreateOS benchmark sandbox and leaves the
+// shared harness, other providers, and the catalog image untouched.
+export const CREATEOS_PYTHON_PREFLIGHT =
+	'if command -v asdf >/dev/null 2>&1; then python_dir="$(asdf where python)"; ' +
+	'test -x "$python_dir/bin/python3"; ln -sfn "$python_dir/bin/python3" /usr/local/bin/python3; fi; ' +
+	'python3 --version; test -x "$(readlink -f "$(command -v python3)")"';
+
 const createOptions = type({
 	name: "string >= 1",
 	deadlineMs: "number.integer > 0",
@@ -152,7 +162,7 @@ export function createosSpec(
 	const compute = nativeSdkCompute(
 		async (options: typeof createOptions.infer, operation) => {
 			operation.signal?.throwIfAborted();
-			return client.createSandbox(
+			const sandbox = await client.createSandbox(
 				{
 					shape: CREATEOS_SHAPE,
 					rootfs: CREATEOS_ROOTFS,
@@ -162,6 +172,15 @@ export function createosSpec(
 				},
 				requestOptions(operation, options.deadlineMs),
 			);
+			const prepared = await runCreateosCommand(sandbox, CREATEOS_PYTHON_PREFLIGHT, {
+				signal: operation.signal,
+			});
+			if (prepared.exitCode !== 0) {
+				throw new Error(
+					`CreateOS Python preflight failed: ${prepared.stderr.trim() || prepared.stdout.trim() || `exit ${prepared.exitCode}`}`,
+				);
+			}
+			return sandbox;
 		},
 		(sandbox) => ({
 			sandboxId: sandbox.id,

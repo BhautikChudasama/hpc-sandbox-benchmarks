@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test";
 import type { CreateRequest } from "@sandbox-benchmarks/driver";
 import { driverFromComputeSpec } from "@sandbox-benchmarks/driver/computesdk";
 import { TARGET_SPEC } from "@sandbox-benchmarks/schema/target-spec";
-import { CREATEOS_DISK_MIB, CREATEOS_ROOTFS, CREATEOS_SHAPE, createosSpec } from "./index.ts";
+import {
+	CREATEOS_DISK_MIB,
+	CREATEOS_PYTHON_PREFLIGHT,
+	CREATEOS_ROOTFS,
+	CREATEOS_SHAPE,
+	createosSpec,
+} from "./index.ts";
 
 const context = {
 	env: {
@@ -96,11 +102,18 @@ describe("CreateOS native SDK driver", () => {
 		});
 		expect(create?.body?.name).toMatch(/^sbbench-[a-f0-9]{14}$/);
 
+		const execCallsAfterCreate = calls.filter((call) => call.path.endsWith("/exec"));
+		expect(execCallsAfterCreate).toHaveLength(1);
+		expect(execCallsAfterCreate[0]?.body).toEqual({
+			cmd: "bash",
+			args: ["-lc", CREATEOS_PYTHON_PREFLIGHT],
+		});
+
 		expect(await session.exec("printf ok")).toMatchObject({
 			exit: { kind: "exited", code: 0 },
 			stdout: "ok\n",
 		});
-		expect(calls.find((call) => call.path.endsWith("/exec"))?.body).toEqual({
+		expect(calls.filter((call) => call.path.endsWith("/exec"))[1]?.body).toEqual({
 			cmd: "bash",
 			args: ["-lc", "printf ok"],
 		});
