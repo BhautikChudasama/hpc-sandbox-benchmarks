@@ -72,7 +72,8 @@ jobs:
     name: Freeze experiment
     if: >
       (github.repository == 'starslingdev/hpc-sandbox-benchmarks' ||
-       github.repository == 'NodeOps-app/hpc-sandbox-benchmarks') &&
+       github.repository == 'NodeOps-app/hpc-sandbox-benchmarks' ||
+       github.repository == 'BhautikChudasama/hpc-sandbox-benchmarks') &&
       (github.ref == 'refs/heads/main' || inputs.allow_branch)
     runs-on: ubuntu-24.04
     permissions:
