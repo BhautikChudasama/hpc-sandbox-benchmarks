@@ -5,6 +5,7 @@
 // The PTS parser, per-file extraction, observed-spec reading, and Run writer all live under ./lib and
 // are implementation detail. This surface exposes only the entry points consumers (the CLI) need:
 // normalize a raw tree, write the Run, and summarize it.
+
 export { aggregateRuns } from "./lib/aggregate.ts";
 export {
 	type DatasetImpact,
