@@ -73,6 +73,10 @@ function isCreateosNotFound(error: unknown): boolean {
 	return matchesAnyCause(error, (cause) => cause instanceof CreateosSandboxNotFoundError);
 }
 
+function isTerminalSandbox(status: string): boolean {
+	return status === "destroyed" || status === "failed";
+}
+
 export function isCreateosDefinitiveCreateRejection(error: unknown): boolean {
 	return matchesAnyCause(
 		error,
@@ -126,7 +130,7 @@ export function createosSpec(
 	async function observe(id: string, operation?: DriverOperationOptions) {
 		try {
 			const sandbox = await client.getSandbox(id, requestOptions(operation));
-			return sandbox.status === "destroyed"
+			return isTerminalSandbox(sandbox.status)
 				? ({ state: "absent" } as const)
 				: ({ state: "running" } as const);
 		} catch (error) {
@@ -137,7 +141,7 @@ export function createosSpec(
 
 	async function inventoryAbsent(id: string, operation?: DriverOperationOptions): Promise<boolean> {
 		const sandboxes = await client.listSandboxes(requestOptions(operation));
-		return !sandboxes.some((sandbox) => sandbox.id === id && sandbox.status !== "destroyed");
+		return !sandboxes.some((sandbox) => sandbox.id === id && !isTerminalSandbox(sandbox.status));
 	}
 
 	async function destroy(id: string, operation?: DriverOperationOptions): Promise<void> {
@@ -152,7 +156,7 @@ export function createosSpec(
 			if (isCreateosNotFound(error)) return;
 			throw error;
 		}
-		if (sandbox.status !== "destroyed" && sandbox.status !== "destroying") {
+		if (!isTerminalSandbox(sandbox.status) && sandbox.status !== "destroying") {
 			await sandbox.destroy(requestOptions({ signal }));
 		}
 		await pollUntilReady({
@@ -255,7 +259,7 @@ export function createosSpec(
 			cleanup: async (_compute, locator, operation) => {
 				operation.signal?.throwIfAborted();
 				const matches = (await client.listSandboxes(requestOptions(operation))).filter(
-					(sandbox) => sandbox.name === locator.value && sandbox.status !== "destroyed",
+					(sandbox) => sandbox.name === locator.value && !isTerminalSandbox(sandbox.status),
 				);
 				if (matches.length === 0) return { status: "absent" };
 				if (matches.length !== 1)
@@ -277,7 +281,7 @@ export function createosSpec(
 				operation.signal?.throwIfAborted();
 				const sandboxes = await client.listSandboxes(requestOptions(operation));
 				operation.signal?.throwIfAborted();
-				const live = sandboxes.filter((sandbox) => sandbox.status !== "destroyed");
+				const live = sandboxes.filter((sandbox) => !isTerminalSandbox(sandbox.status));
 				return {
 					owned: live
 						.filter((sandbox) => sandbox.name?.startsWith(CREATEOS_NAME_PREFIX))

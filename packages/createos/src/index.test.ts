@@ -45,8 +45,8 @@ function success(data: unknown): Response {
 	return Response.json({ status: "success", data });
 }
 
-function fixture() {
-	let state = "running";
+function fixture(initialState = "running", inventoryName = "sbbench-test") {
+	let state = initialState;
 	let staleInventoryReads = 0;
 	const calls: Array<{ method: string; path: string; body?: Record<string, unknown> }> = [];
 	const mockFetch = Object.assign(
@@ -65,7 +65,7 @@ function fixture() {
 				const inventoryState =
 					state === "destroyed" && staleInventoryReads-- > 0 ? "running" : state;
 				return success({
-					data: inventoryState === "destroyed" ? [] : [view(inventoryState)],
+					data: inventoryState === "destroyed" ? [] : [view(inventoryState, inventoryName)],
 					pagination: {
 						total: inventoryState === "destroyed" ? 0 : 1,
 						limit: 500,
@@ -138,6 +138,11 @@ describe("CreateOS native SDK driver", () => {
 			owned: [{ provider: "createos", id: "sb-01test" }],
 			foreignCount: 0,
 		});
+	});
+
+	test("terminal failed creates do not become foreign account allocations", async () => {
+		const { driver } = fixture("failed", "generated-create-failure");
+		expect(await driver.inventory?.list()).toEqual({ owned: [], foreignCount: 0 });
 	});
 
 	test("destroy waits for collection inventory to observe deletion", async () => {
