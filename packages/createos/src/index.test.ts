@@ -47,6 +47,7 @@ function success(data: unknown): Response {
 
 function fixture() {
 	let state = "running";
+	let staleInventoryReads = 0;
 	const calls: Array<{ method: string; path: string; body?: Record<string, unknown> }> = [];
 	const mockFetch = Object.assign(
 		async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
@@ -61,9 +62,16 @@ function fixture() {
 				return success({ ...view(), ...body, spawn_ms: 25, bandwidth_quota_bytes: 50 });
 			}
 			if (url.pathname === "/v1/sandboxes" && method === "GET") {
+				const inventoryState =
+					state === "destroyed" && staleInventoryReads-- > 0 ? "running" : state;
 				return success({
-					data: state === "destroyed" ? [] : [view(state)],
-					pagination: { total: state === "destroyed" ? 0 : 1, limit: 500, offset: 0, count: 1 },
+					data: inventoryState === "destroyed" ? [] : [view(inventoryState)],
+					pagination: {
+						total: inventoryState === "destroyed" ? 0 : 1,
+						limit: 500,
+						offset: 0,
+						count: inventoryState === "destroyed" ? 0 : 1,
+					},
 				});
 			}
 			if (url.pathname === "/v1/sandboxes/sb-01test/exec") {
@@ -83,6 +91,9 @@ function fixture() {
 	const spec = createosSpec(context, { fetch: mockFetch, deletePollMs: 1 });
 	return {
 		calls,
+		setStaleInventoryReads: (count: number) => {
+			staleInventoryReads = count;
+		},
 		driver: driverFromComputeSpec("createos", spec, context.resolvedArtifact, [
 			context.env.CREATEOS_API_KEY,
 		]),
@@ -127,5 +138,19 @@ describe("CreateOS native SDK driver", () => {
 			owned: [{ provider: "createos", id: "sb-01test" }],
 			foreignCount: 0,
 		});
+	});
+
+	test("destroy waits for collection inventory to observe deletion", async () => {
+		const { calls, driver, setStaleInventoryReads } = fixture();
+		const session = await driver.create(request);
+		setStaleInventoryReads(2);
+
+		await session.destroy();
+
+		expect(
+			calls.filter(
+				(call) => call.method === "GET" && call.path.startsWith("/v1/sandboxes?"),
+			),
+		).toHaveLength(3);
 	});
 });

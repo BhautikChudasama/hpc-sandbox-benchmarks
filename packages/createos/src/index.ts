@@ -135,6 +135,11 @@ export function createosSpec(
 		}
 	}
 
+	async function inventoryAbsent(id: string, operation?: DriverOperationOptions): Promise<boolean> {
+		const sandboxes = await client.listSandboxes(requestOptions(operation));
+		return !sandboxes.some((sandbox) => sandbox.id === id && sandbox.status !== "destroyed");
+	}
+
 	async function destroy(id: string, operation?: DriverOperationOptions): Promise<void> {
 		const signal = AbortSignal.any([
 			AbortSignal.timeout(deleteTimeoutMs),
@@ -155,7 +160,15 @@ export function createosSpec(
 			deadlineMs: deleteTimeoutMs,
 			intervalMs: deletePollMs,
 			signal,
-			poll: async () => ((await observe(id, { signal })).state === "absent" ? true : null),
+			// CreateOS updates the item and collection views independently. Admission for the
+			// next benchmark reads the collection, so a terminal item response alone is not
+			// enough to release the account: the stale collection row can otherwise be
+			// mistaken for an unowned live sandbox.
+			poll: async () =>
+				(await observe(id, { signal })).state === "absent" &&
+				(await inventoryAbsent(id, { signal }))
+					? true
+					: null,
 		});
 	}
 
